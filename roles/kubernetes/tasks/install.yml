@@ -1,0 +1,26 @@
+---
+
+- name: 'Add the kubernetes apt signing key'
+  apt_key:
+    keyserver: 'pool.sks-keyservers.net'
+    id: '3746C208A7317B0F'
+  notify: 'kubernetes-apt-get-update'
+  tags: [kubenode]
+
+- name: 'Add the official kubernetes repo'
+  apt_repository:
+    repo: 'deb http://apt.kubernetes.io/ kubernetes-{{ ansible_distribution_release }} main'
+    state: 'present'
+  notify: 'kubernetes-apt-get-update'
+  tags: [kubenode]
+
+- meta: flush_handlers
+  when: kubernetes_ppa_use
+
+- name: 'Install Kubernetes'
+  apt:
+    name: "{{ item }}"
+    state: 'latest'
+  with_items:
+    - "{{ kubernetes_packages }}"
+  tags: [kubenode]

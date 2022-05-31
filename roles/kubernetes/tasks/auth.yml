@@ -1,0 +1,9 @@
+---
+
+- name: Create security files
+  template: src={{ item.name }}.j2 dest=/etc/kubernetes/pki/{{ item.name }} mode=0400
+  when: item.when
+  with_items:
+    - { name: encryption-provider.yml,    when: "{{ kubernetes_encryption_key }}" }
+  no_log: true
+  tags: [ssl-certs,config,kubenode]

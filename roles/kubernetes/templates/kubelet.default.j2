@@ -1,0 +1,7 @@
+#
+KUBELET_CLOUD_ARGS={{ '--cloud-provider='+kubernetes_kubelet_cloud_provider if kubernetes_kubelet_cloud_provider }}
+{% if kubernetes_node_labels != '' %}
+KUBELET_EXTRA_ARGS=--node-labels topology.kubernetes.io/region={{ kubernetes_node_region }},topology.kubernetes.io/zone={{ kubernetes_node_zone }},{{ kubernetes_node_labels }}
+{% else %}
+KUBELET_EXTRA_ARGS=--node-labels topology.kubernetes.io/region={{ kubernetes_node_region }},topology.kubernetes.io/zone={{ kubernetes_node_zone }}
+{% endif %}

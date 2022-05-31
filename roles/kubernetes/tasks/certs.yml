@@ -1,0 +1,151 @@
+---
+
+# - name: check certs exists
+#   connection: local
+#   stat:
+#     path: "{{ playbook_dir }}/files/kubernetes/{{ kubernetes_api_host }}/{{ item }}"
+#   register: check_cert
+#   with_items:
+#     - ca.key
+#     - sa.key
+#     - front-proxy-ca.key
+#   no_log: true
+#   run_once: true
+#   tags: [ssl-certs]
+
+# - name: Generate private keys
+#   connection: local
+#   openssl_privatekey:
+#     type: "RSA"
+#     path: "{{ playbook_dir }}/files/kubernetes/{{ kubernetes_api_host }}/{{ item.item }}"
+#     force: no
+#     size: "{{ kubernetes_cert_key_size }}"
+#     mode: 0400
+#   when: not item.stat.exists
+#   with_items:
+#     - "{{ check_cert.results }}"
+#   run_once: true
+#   tags: [ssl-certs]
+
+# - name: Generate kubernetes root CSR
+#   connection: local
+#   openssl_csr:
+#     path: "{{ playbook_dir }}/files/kubernetes/{{ kubernetes_api_host }}/{{ item.name }}.csr"
+#     privatekey_path: "{{ playbook_dir }}/files/kubernetes/{{ kubernetes_api_host }}/{{ item.name }}.key"
+#     common_name: "{{ item.cm }}"
+#     # organization_name: "{{ kubernetes_cert_org }}"
+#     subject_alt_name: "email:kubernetes@{{ kubernetes_dns_domain }}"
+#     basic_constraints: ['CA:TRUE']
+#     basic_constraints_critical: true
+#     key_usage: ['digitalSignature','keyEncipherment','keyCertSign']
+#     key_usage_critical: true
+#     mode: 0400
+#   with_items:
+#       - { name: ca,             cm: "kubernetes"      }
+#       - { name: front-proxy-ca, cm: "front-proxy"     }
+#   tags: [ssl-certs]
+
+# - name: Generate kubernetes root cert
+#   connection: local
+#   openssl_certificate:
+#     path: "{{ playbook_dir }}/files/kubernetes/{{ kubernetes_api_host }}/{{ item }}.crt"
+#     privatekey_path: "{{ playbook_dir }}/files/kubernetes/{{ kubernetes_api_host }}/{{ item }}.key"
+#     csr_path: "{{ playbook_dir }}/files/kubernetes/{{ kubernetes_api_host }}/{{ item }}.csr"
+#     selfsigned_not_after: "+{{ kubernetes_cert_key_days }}d"
+#     provider: selfsigned
+#     mode: 0400
+#   with_items:
+#       - ca
+#       - front-proxy-ca
+#   run_once: true
+#   tags: [ssl-certs]
+
+##############
+
+- name: Copy root certificate to server
+  copy:
+    content: "{{ item.content }}"
+    dest: "/etc/kubernetes/pki/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: 0400
+  with_items:
+    - { content: "{{ kubernetes_ca_key_data          | default() | b64decode  }}\n",      dest: "ca.key" }
+    - { content: "{{ kubernetes_ca_certificate_data  | default() | b64decode  }}\n",      dest: "ca.crt" }
+    - { content: "{{ kubernetes_sa_key_data          | default() | b64decode  }}\n",      dest: "sa.key" }
+    - { content: "{{ kubernetes_front_ca_key_data          | default() | b64decode  }}\n",  dest: "front-proxy-ca.key" }
+    - { content: "{{ kubernetes_front_ca_certificate_data  | default() | b64decode  }}\n",  dest: "front-proxy-ca.crt" }
+  no_log: true
+  tags: [ssl-certs]
+
+- name: Generate public key
+  openssl_publickey:
+    path: /etc/kubernetes/pki/sa.pub
+    privatekey_path: /etc/kubernetes/pki/sa.key
+
+# Api certs
+- name: Generate RSA keys
+  openssl_privatekey:
+    path: "/etc/kubernetes/pki/{{ item }}.key"
+    force: no
+    size: "{{ kubernetes_cert_key_size }}"
+    mode: 0400
+  with_items:
+    - apiserver
+    - apiserver-kubelet-client
+    - apiserver-proxy-client
+    - scheduler
+    - controller-manager
+    - coredns
+    - admin
+  no_log: true
+  tags: [ssl-certs]
+
+- name: Generate system CSR
+  openssl_csr:
+    path: "/etc/kubernetes/pki/{{ item.name }}.csr"
+    privatekey_path: "/etc/kubernetes/pki/{{ item.name }}.key"
+    common_name: "{{ item.cn | default(item.o + ':' + inventory_hostname) }}"
+    organization_name: "{{ item.o }}"
+    subject_alt_name: "{{ item.s }}"
+    key_usage: ['digitalSignature','keyEncipherment']
+    key_usage_critical: true
+    extended_key_usage: "{{ item.ek }}"
+    mode: 0400
+  with_items:
+    - { name: apiserver,                    o: "Kubernetes",                      cn: "kube-apiserver",                   ek: ['serverAuth'],
+        s: "{% if not kubernetes_api_advertise_ip == kubernetes_api_public %}IP:{{ kubernetes_api_advertise_ip }},{% endif %}IP:{{ kubernetes_api_public }},IP:{{ kubernetes_api }},DNS:{{ kubernetes_api_host }},DNS:kubernetes,DNS:kubernetes.default,DNS:kubernetes.default.svc,DNS:kubernetes.default.svc.{{ kubernetes_dns_domain }}" }
+    - { name: apiserver-kubelet-client,     o: "system:masters",                  cn: "kube-apiserver-kubelet-client",    ek: ['clientAuth'],
+        s: "email:apiserver@{{ kubernetes_dns_domain }}" }
+    - { name: apiserver-proxy-client,       o: "",                                cn: "front-proxy-client",               ek: ['clientAuth'],
+        s: "email:apiserver@{{ kubernetes_dns_domain }}" }
+
+    - { name: scheduler,                    o: "system:kube-scheduler",           cn: "system:kube-scheduler",            ek: ['clientAuth'],
+        s:  "email:scheduler@{{ kubernetes_dns_domain }}" }
+    - { name: controller-manager,           o: "system:kube-controller-manager",  cn: "system:kube-controller-manager",   ek: ['clientAuth'],
+        s:  "email:controller-manager@{{ kubernetes_dns_domain }}" }
+
+    - { name: coredns,                      o: "system:kube-dns",                 cn: "system:kube-dns:{{ inventory_hostname }}",   ek: ['clientAuth'],
+        s:  "email:dns@{{ kubernetes_dns_domain }}" }
+
+    - { name: admin,                        o: "system:masters",                  cn: "kube-admin",                       ek: ['clientAuth'],
+        s: "email:admin@{{ kubernetes_dns_domain }}" }
+  tags: [ssl-certs]
+
+- name: Sign keys
+  openssl_certificate:
+    path: "/etc/kubernetes/pki/{{ item.name }}.crt"
+    csr_path: "/etc/kubernetes/pki/{{ item.name }}.csr"
+    ownca_path: "/etc/kubernetes/pki/{{ item.ownca }}.crt"
+    ownca_privatekey_path: "/etc/kubernetes/pki/{{ item.ownca }}.key"
+    provider: ownca
+    mode: 0400
+  with_items:
+    - { ownca: ca,              name: apiserver                 }
+    - { ownca: ca,              name: apiserver-kubelet-client  }
+    - { ownca: front-proxy-ca,  name: apiserver-proxy-client    }
+    - { ownca: ca,              name: scheduler                 }
+    - { ownca: ca,              name: controller-manager        }
+    - { ownca: ca,              name: coredns                   }
+    - { ownca: ca,              name: admin                     }
+  tags: [ssl-certs]

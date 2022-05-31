@@ -1,0 +1,141 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: customer:csr-creator
+rules:
+- apiGroups:
+  - certificates.k8s.io
+  resources:
+  - certificatesigningrequests
+  verbs:
+  - create
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: customer:csr-creator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: customer:csr-creator
+subjects:
+  - apiGroup: ""
+    kind: ServiceAccount
+    name: customer-default-csr-ca
+    namespace: default
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: customer-default-csr-ca
+  namespace: default
+---
+#
+# User default permissions
+#
+# apiVersion: policy/v1beta1
+# kind: PodSecurityPolicy
+# metadata:
+#   name: privileged
+#   annotations:
+#     seccomp.security.alpha.kubernetes.io/allowedProfileNames: '*'
+# spec:
+#   privileged: true
+#   allowPrivilegeEscalation: true
+#   allowedCapabilities:
+#   - '*'
+#   volumes:
+#   - '*'
+#   hostNetwork: true
+#   hostPorts:
+#   - min: 1
+#     max: 65535
+#   hostIPC: true
+#   hostPID: true
+#   runAsUser:
+#     rule: 'RunAsAny'
+#   seLinux:
+#     rule: 'RunAsAny'
+#   supplementalGroups:
+#     rule: 'RunAsAny'
+#   fsGroup:
+#     rule: 'RunAsAny'
+# ---
+# apiVersion: policy/v1beta1
+# kind: PodSecurityPolicy
+# metadata:
+#   name: restricted
+#   annotations:
+#     seccomp.security.alpha.kubernetes.io/allowedProfileNames: 'docker/default,runtime/default'
+#     apparmor.security.beta.kubernetes.io/allowedProfileNames: 'runtime/default'
+#     seccomp.security.alpha.kubernetes.io/defaultProfileName:  'runtime/default'
+#     apparmor.security.beta.kubernetes.io/defaultProfileName:  'runtime/default'
+# spec:
+#   privileged: false
+#   # Required to prevent escalations to root.
+#   allowPrivilegeEscalation: false
+#   # This is redundant with non-root + disallow privilege escalation,
+#   # but we can provide it for defense in depth.
+#   requiredDropCapabilities:
+#     - ALL
+#   # Allow core volume types.
+#   volumes:
+#     - 'configMap'
+#     - 'emptyDir'
+#     - 'projected'
+#     - 'secret'
+#     - 'downwardAPI'
+#     - 'persistentVolumeClaim'
+#   hostNetwork: false
+#   hostIPC: false
+#   hostPID: false
+#   runAsUser:
+#     # Require the container to run without root privileges.
+#     rule: 'MustRunAsNonRoot'
+#   seLinux:
+#     # This policy assumes the nodes are using AppArmor rather than SELinux.
+#     rule: 'RunAsAny'
+#   supplementalGroups:
+#     rule: 'MustRunAs'
+#     ranges:
+#       # Forbid adding the root group.
+#       - min: 1
+#         max: 65535
+#   fsGroup:
+#     rule: 'MustRunAs'
+#     ranges:
+#       # Forbid adding the root group.
+#       - min: 1
+#         max: 65535
+#   readOnlyRootFilesystem: false
+# ---
+# kind: ClusterRole
+# apiVersion: rbac.authorization.k8s.io/v1
+# metadata:
+#   name: psp:privileged
+# rules:
+# - apiGroups: ['policy']
+#   resources: ['podsecuritypolicies']
+#   verbs:     ['use']
+#   resourceNames:
+#   - privileged
+# ---
+# kind: ClusterRoleBinding
+# apiVersion: rbac.authorization.k8s.io/v1
+# metadata:
+#   name: psp:privileged
+# roleRef:
+#   kind: ClusterRole
+#   name: psp:privileged
+#   apiGroup: rbac.authorization.k8s.io
+# subjects:
+# - kind: Group
+#   apiGroup: rbac.authorization.k8s.io
+#   name: system:serviceaccounts
+# - kind: Group
+#   apiGroup: rbac.authorization.k8s.io
+#   name: system:authenticated

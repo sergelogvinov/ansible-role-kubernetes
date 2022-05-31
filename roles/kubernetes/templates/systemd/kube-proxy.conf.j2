@@ -1,0 +1,15 @@
+[Unit]
+Description=kube-proxy: The Kubernetes Proxy
+Documentation=http://kubernetes.io/docs/
+After=network.target docker.target
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=-/etc/default/%p
+ExecStart=/usr/bin/kube-proxy --config=/var/lib/kube-proxy/config.yaml --v=2
+StartLimitInterval=0
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

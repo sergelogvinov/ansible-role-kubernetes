@@ -1,0 +1,57 @@
+---
+
+- name: 'Get kubernetes binary'
+  get_url:
+    url: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    force: no
+  with_items:
+    - { src: "{{ kubernetes_distrib }}",      dest: "{{ playbook_dir }}/files/archive/kubernetes-{{ kubernetes_version }}.tar.gz" }
+    - { src: "{{ kubernetes_cni_plugins }}",  dest: "{{ playbook_dir }}/files/archive/cni-plugins-{{ kubernetes_cni_plugins_version }}.tgz" }
+  register: kubernetes_download
+  run_once: true
+  connection: local
+
+- name: 'Prepare directories'
+  file:
+    path: "{{ item.name }}"
+    mode: "{{ item.mode }}"
+    state: directory
+  run_once: true
+  connection: local
+  with_items:
+    - { name: "{{ playbook_dir }}/files/kubernetes/{{ kubernetes_version }}", mode: '0755' }
+
+- name: 'Unarchive kubernetes binary'
+  unarchive: src={{ item.src }} dest={{ item.dest }} exclude={{ kubernetes_tar_exclude }} creates=no
+  with_items:
+    - { src: "{{ playbook_dir }}/files/archive/kubernetes-{{ kubernetes_version }}.tar.gz",
+        dest: "{{ playbook_dir }}/files/kubernetes/{{ kubernetes_version }}" }
+    - { src: "{{ playbook_dir }}/files/archive/cni-plugins-{{ kubernetes_cni_plugins_version }}.tgz",
+        dest: "{{ playbook_dir }}/files/kubernetes/{{ kubernetes_version }}" }
+  when: kubernetes_download.changed
+  run_once: true
+  connection: local
+
+- name: 'Install Kubernetes from tar-binary'
+  copy:
+    src: "{{ playbook_dir }}/files/kubernetes/{{ kubernetes_version }}/{{ item.name }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: root
+    mode: 0755
+  when: item.enabled
+  with_items:
+    - { name: kubernetes/server/bin/kubelet,                 dest: "/usr/bin/kubelet",                 enabled: "{{ kubernetes_enable_kublet }}"    }
+    - { name: kubernetes/server/bin/kube-proxy,              dest: "/usr/bin/kube-proxy",              enabled: "{{ kubernetes_enable_proxy }}"     }
+    - { name: kubernetes/server/bin/kubectl,                 dest: "/usr/bin/kubectl",                 enabled: "{{ kubernetes_enable_apiserver }}" }
+
+    # - { name: kubernetes/server/bin/kube-apiserver,          dest: "/usr/bin/kube-apiserver",          enabled: "{{ kubernetes_enable_apiserver }}" }
+    # - { name: kubernetes/server/bin/kube-scheduler,          dest: "/usr/bin/kube-scheduler",          enabled: "{{ kubernetes_enable_scheduler }}" }
+    # - { name: kubernetes/server/bin/kube-controller-manager, dest: "/usr/bin/kube-controller-manager", enabled: "{{ kubernetes_enable_controller }}" }
+
+    - { name: loopback,                                      dest: "/opt/cni/bin/loopback",            enabled: true }
+    - { name: host-local,                                    dest: "/opt/cni/bin/host-local",          enabled: true }
+    - { name: bridge,                                        dest: "/opt/cni/bin/bridge",              enabled: true }
+    - { name: portmap,                                       dest: "/opt/cni/bin/portmap",             enabled: true }
+  tags: [kubenode]

@@ -1,0 +1,31 @@
+---
+
+# - name: Copy certs to coredns
+#   copy:
+#     content: "{{ item.content }}"
+#     dest: "/etc/coredns/{{ item.dest }}"
+#     owner: root
+#     group: root
+#     mode: 0400
+#   when: kubernetes_dns_enable|bool
+#   with_items:
+#     - { content: "{{ kubernetes_coredns_certificate_data  | default() | b64decode  }}\n",      dest: "coredns.crt" }
+#     - { content: "{{ kubernetes_coredns_key_data          | default() | b64decode  }}\n",      dest: "coredns.key" }
+#   no_log: true
+#   tags: [ssl-certs]
+
+- name: 'Create manifests files'
+  template:
+    src: "manifests/{{ item.name }}.j2"
+    dest: "/etc/kubernetes/manifests/{{ item.name }}"
+    owner: root
+    group: root
+    mode: "0640"
+  when: item.when|bool
+  with_items:
+    # - { name: etcd.json,                      when: "{{ kubernetes_enable_etcd }}"        }
+    - { name: kube-apiserver.yaml,            when: "{{ kubernetes_enable_apiserver  }}"  }
+    - { name: kube-scheduler.yaml,            when: "{{ kubernetes_enable_scheduler  }}"  }
+    - { name: kube-controller-manager.yaml,   when: "{{ kubernetes_enable_controller }}"  }
+    # - { name: kube-dns.yaml,                  when: "{{ kubernetes_dns_enable }}"         }
+  tags: [config]

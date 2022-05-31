@@ -1,0 +1,58 @@
+---
+
+- name: 'Get kubernetes binary'
+  get_url:
+    url: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    force: no
+  when: item.when | default(true)
+  with_items:
+    - { src: "{{ kubernetes_distrib }}",      dest: "/var/cache/apt/archives/kubernetes-{{ kubernetes_version }}.tar.gz",       when: "{{ kubernetes_as_service and kubernetes_enable_apiserver }}" }
+    - { src: "{{ kubernetes_distrib_node }}", dest: "/var/cache/apt/archives/kubernetes-node-{{ kubernetes_version }}.tar.gz" }
+    # - { src: "{{ kubernetes_distrib_client }}", dest: "/var/cache/apt/archives/kubernetes-client-{{ kubernetes_version }}.tar.gz",
+    #     when: "{{ kubernetes_enable_apiserver }}" }
+
+    - { src: "{{ kubernetes_cni_plugins }}",  dest: "/var/cache/apt/archives/cni-plugins-{{ kubernetes_cni_plugins_version }}.tgz",
+        when: "{{ kubernetes_cni }}" }
+  register: kubernetes_download
+
+- name: 'Unarchive kubernetes binary'
+  unarchive: src={{ item.src }} dest={{ item.dest }} exclude={{ kubernetes_tar_exclude }} creates=no remote_src=yes
+  when: kubernetes_download.changed and item.when | default(true)
+  with_items:
+    - { src:  "/var/cache/apt/archives/kubernetes-{{ kubernetes_version }}.tar.gz",
+        dest: "/var/cache/apt/archives/kubernetes-{{ kubernetes_version }}",
+        when: "{{ kubernetes_as_service and kubernetes_enable_apiserver }}" }
+    - { src:  "/var/cache/apt/archives/kubernetes-node-{{ kubernetes_version }}.tar.gz",
+        dest: "/var/cache/apt/archives/kubernetes-{{ kubernetes_version }}" }
+    # - { src:  "/var/cache/apt/archives/kubernetes-client-{{ kubernetes_version }}.tar.gz",
+    #     dest: "/var/cache/apt/archives/kubernetes-{{ kubernetes_version }}",
+    #     when: "{{ kubernetes_enable_apiserver }}" }
+    - { src:  "/var/cache/apt/archives/cni-plugins-{{ kubernetes_cni_plugins_version }}.tgz",
+        dest: "/var/cache/apt/archives/kubernetes-{{ kubernetes_version }}",
+        when: "{{ kubernetes_cni }}" }
+
+- name: 'Install Kubernetes from tar-binary'
+  copy:
+    src: "/var/cache/apt/archives/kubernetes-{{ kubernetes_version }}/{{ item.name }}"
+    dest: "{{ item.dest }}"
+    remote_src: yes
+    owner: root
+    group: root
+    mode: 0755
+  when: item.enabled | bool
+  with_items:
+    - { name: kubernetes/node/bin/kubelet,                    dest: "/usr/bin/kubelet",                 enabled: "{{ kubernetes_enable_kublet }}"    }
+    - { name: kubernetes/node/bin/kube-proxy,                 dest: "/usr/bin/kube-proxy",              enabled: "{{ kubernetes_enable_proxy }}"     }
+    - { name: kubernetes/node/bin/kubectl,                    dest: "/usr/bin/kubectl",                 enabled: "{{ kubernetes_enable_apiserver }}" }
+
+    - { name: kubernetes/server/bin/kube-apiserver,           dest: "/usr/bin/kube-apiserver",          enabled: "{{ kubernetes_as_service and kubernetes_enable_apiserver }}"  }
+    - { name: kubernetes/server/bin/kube-scheduler,           dest: "/usr/bin/kube-scheduler",          enabled: "{{ kubernetes_as_service and kubernetes_enable_scheduler }}"  }
+    - { name: kubernetes/server/bin/kube-controller-manager,  dest: "/usr/bin/kube-controller-manager", enabled: "{{ kubernetes_as_service and kubernetes_enable_controller }}" }
+
+    - { name: loopback,                                       dest: "/opt/cni/bin/loopback",            enabled: "{{ kubernetes_cni }}" }
+    - { name: host-local,                                     dest: "/opt/cni/bin/host-local",          enabled: "{{ kubernetes_cni }}" }
+    - { name: bridge,                                         dest: "/opt/cni/bin/bridge",              enabled: "{{ kubernetes_cni }}" }
+    - { name: portmap,                                        dest: "/opt/cni/bin/portmap",             enabled: "{{ kubernetes_cni }}" }
+    - { name: flannel,                                        dest: "/opt/cni/bin/flannel",             enabled: "{{ kubernetes_cni }}" }
+  tags: [kubenode]

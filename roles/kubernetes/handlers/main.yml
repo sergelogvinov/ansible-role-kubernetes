@@ -1,0 +1,8 @@
+---
+
+- name: 'kubernetes-apt-get-update'
+  apt:
+    update_cache: true
+
+- name: 'kubernetes-systemctl-reload'
+  shell: systemctl daemon-reload

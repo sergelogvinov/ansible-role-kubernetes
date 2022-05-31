@@ -1,0 +1,17 @@
+[Unit]
+Description=kube-scheduler: The Kubernetes Scheduler Agent
+Documentation=http://kubernetes.io/docs/
+After=network.target
+Wants=network-online.target
+
+[Service]
+Environment="KUBSCH_CFG=--kubeconfig=/etc/kubernetes/scheduler.conf --authentication-kubeconfig=/etc/kubernetes/scheduler.conf --authorization-kubeconfig=/etc/kubernetes/scheduler.conf"
+Environment="KUBSCH_PARAMS="
+EnvironmentFile=-/etc/default/%p
+ExecStart=/usr/bin/kube-scheduler --v=2 --bind-address=127.0.0.1 --port=0 $KUBSCH_CFG $KUBSCH_PARAMS
+Restart=always
+StartLimitInterval=0
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

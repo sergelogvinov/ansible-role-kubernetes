@@ -1,0 +1,19 @@
+apiVersion: v1
+clusters:
+- cluster:
+    certificate-authority-data: {{ kubernetes_ca_certificate_data }}
+    server: https://{{ kubernetes_api_public }}:6443
+  name: kubernetes
+contexts:
+- context:
+    cluster: kubernetes
+    user: coredns
+  name: coredns
+current-context: coredns
+kind: Config
+preferences: {}
+users:
+- name: coredns
+  user:
+    client-certificate: /etc/coredns/coredns.crt
+    client-key: /etc/coredns/coredns.key

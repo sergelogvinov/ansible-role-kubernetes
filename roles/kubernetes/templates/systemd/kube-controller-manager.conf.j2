@@ -1,0 +1,19 @@
+[Unit]
+Description=kube-controller-manager: The Kubernetes Controller Manager Agent
+Documentation=http://kubernetes.io/docs/
+After=network.target
+Wants=network-online.target
+
+[Service]
+Environment="KUBCTL_PARAMS=--bind-address=127.0.0.1 --port=0 --kubeconfig=/etc/kubernetes/controller-manager.conf --authentication-kubeconfig=/etc/kubernetes/controller-manager.conf --authorization-kubeconfig=/etc/kubernetes/controller-manager.conf"
+Environment="KUBCTL_TLS=--requestheader-client-ca-file=/etc/kubernetes/pki/front-proxy-ca.crt"
+Environment="KUBCTL_CERT=--root-ca-file=/etc/kubernetes/pki/ca.crt --use-service-account-credentials=true --service-account-private-key-file=/etc/kubernetes/pki/sa.key --client-ca-file=/etc/kubernetes/pki/ca.crt --cluster-signing-cert-file=/etc/kubernetes/pki/ca.crt --cluster-signing-key-file=/etc/kubernetes/pki/ca.key"
+Environment="KUBCTL_FEATURE=--controllers=*,bootstrapsigner,tokencleaner --allocate-node-cidrs=true --node-cidr-mask-size-ipv4={{ kubernetes_node_cidr4_mask }} --node-cidr-mask-size-ipv6={{ kubernetes_node_cidr6_mask }} {{ '--feature-gates='+kubernetes_feature if kubernetes_feature }}"
+EnvironmentFile=-/etc/default/%p
+ExecStart=/usr/bin/kube-controller-manager --v=2 $KUBCTL_PARAMS $KUBCTL_TLS $KUBCTL_CERT $KUBCTL_FEATURE --cluster-cidr={{ kubernetes_cluster_net }}{{ ','+kubernetes_cluster_net6 if kubernetes_cluster_net6 }}
+Restart=always
+StartLimitInterval=0
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

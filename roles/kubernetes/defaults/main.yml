@@ -1,0 +1,86 @@
+---
+
+kubernetes_packages: ['kubectl','kubelet','kubeadm','kubernetes-cni']
+kubernetes_ppa_use: false
+kubernetes_version: 1.23.5
+kubernetes_distrib: "https://dl.k8s.io/v{{ kubernetes_version }}/kubernetes-server-linux-amd64.tar.gz"
+kubernetes_distrib_node: "https://dl.k8s.io/v{{ kubernetes_version }}/kubernetes-node-linux-amd64.tar.gz"
+kubernetes_distrib_client: "https://dl.k8s.io/v{{ kubernetes_version }}/kubernetes-client-linux-amd64.tar.gz"
+kubernetes_cni: false
+kubernetes_cni_plugins_version: 0.8.6
+kubernetes_cni_plugins: "https://github.com/containernetworking/plugins/releases/download/v{{ kubernetes_cni_plugins_version }}/cni-plugins-linux-amd64-v{{ kubernetes_cni_plugins_version }}.tgz"
+kubernetes_tar_exclude:
+  - 'kubernetes-src.tar.gz'
+  - 'kubernetes/server/bin/*.docker_tag'
+  - 'kubernetes/server/bin/*.tar.gz'
+  - 'kubernetes/server/bin/*.tar'
+
+# head -c 32 /dev/urandom | base64
+kubernetes_encryption_key: ~
+
+kubernetes_enable_kublet: false
+kubernetes_dns_enable: false
+kubernetes_enable_proxy: false
+
+kubernetes_as_service: false
+kubernetes_enable_apiserver: false
+kubernetes_enable_controller: false
+kubernetes_enable_scheduler: false
+kubernetes_enable_etcd: false
+
+kubernetes_service_net: '10.200.0.0/24'
+kubernetes_service_net6: ~ # 'fe80:10:200:0::/112'
+kubernetes_cluster_net: '10.32.0.0/12'
+kubernetes_cluster_net6: ~ # 'fd00:10:32:0::/102'
+kubernetes_node_cidr4_mask: 24
+kubernetes_node_cidr6_mask: 112
+kubernetes_feature: ~ # IPv6DualStack=true
+
+kubernetes_api: '10.200.0.1'
+kubernetes_api_host: 'kubernetes.lan'
+kubernetes_api_public: "{{ ansible_default_ipv4['address'] }}"
+kubernetes_api_advertise_ip: "{{ ansible_default_ipv4['address'] }}"
+kubernetes_api_nodeport_range: "30000-32000"
+kubernetes_api_etcd_servers: ~
+kubernetes_kubelet_nodeip: "{{ ansible_default_ipv4['address'] }}"
+# kubernetes_kubelet_nodeip: "{{ ansible_default_ipv4['address'] }}{{ ',' + ansible_default_ipv6['address'] if ansible_default_ipv6 is defined and ansible_default_ipv6['address'][:4] != 'fe80' }}"
+kubernetes_kubelet_nodeip_second: ~
+kubernetes_kubelet_resolv: /etc/coredns/resolv.conf
+kubernetes_kubelet_maxpods: 110
+kubernetes_kubelet_cpupolicy: none
+kubernetes_kubelet_reserved: cpu=100m,memory=256Mi,ephemeral-storage=1Gi
+kubernetes_kubelet_cloud_provider: ~
+kubernetes_system_reserved: ~
+kubernetes_kube_proxy_mode: iptables
+kubernetes_kube_proxy_ipvs_scheduler: rr
+
+kubernetes_dns: ~
+kubernetes_dns_local_ip: ''
+kubernetes_dns_domain: 'cluster.local'
+
+kubernetes_service_domain: "{{ kubernetes_dns_domain }}"
+kubernetes_namespaces: ['production','kube-system','monitoring','tools','default']
+
+kubernetes_users: []
+
+kubernetes_controllers_group: 'controllers'
+kubernetes_nodes_group: 'servers'
+kubernetes_node_labels: ''
+kubernetes_node_region: 'default'
+kubernetes_node_zone: 'default'
+
+kubernetes_cert_key_days: 3650
+kubernetes_cert_key_size: 4096
+kubernetes_cert_org: Kubernetes
+
+kubernetes_ca_key_data: "{{ lookup('file', '{{ playbook_dir }}/files/kubernetes/{{ kubernetes_api_host }}/ca.key') | b64encode }}"
+kubernetes_ca_certificate_data: "{{ lookup('file', '{{ playbook_dir }}/files/kubernetes/{{ kubernetes_api_host }}/ca.crt') | b64encode }}"
+kubernetes_sa_key_data: "{{ lookup('file', '{{ playbook_dir }}/files/kubernetes/{{ kubernetes_api_host }}/sa.key') | b64encode }}"
+kubernetes_front_ca_key_data: "{{ lookup('file', '{{ playbook_dir }}/files/kubernetes/{{ kubernetes_api_host }}/front-proxy-ca.key') | b64encode }}"
+kubernetes_front_ca_certificate_data: "{{ lookup('file', '{{ playbook_dir }}/files/kubernetes/{{ kubernetes_api_host }}/front-proxy-ca.crt') | b64encode }}"
+kubernetes_coredns_certificate_data: "{{ lookup('file', '{{ playbook_dir }}/files/kubernetes/{{ kubernetes_api_host }}/coredns.crt') | b64encode }}"
+kubernetes_coredns_key_data: "{{ lookup('file', '{{ playbook_dir }}/files/kubernetes/{{ kubernetes_api_host }}/coredns.key') | b64encode }}"
+
+# dd if=/dev/urandom bs=1 count=3 2>/dev/null | hexdump -e '"%00x"'
+# dd if=/dev/urandom bs=1 count=8 2>/dev/null | hexdump -e '"%00x"'
+kubernetes_kubelet_bootstrap_token: "07401b.f395accd246ae52d"

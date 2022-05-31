@@ -1,0 +1,35 @@
+[Unit]
+Description=kube-apiserver: The Kubernetes API
+Documentation=http://kubernetes.io/docs/
+After=network.target
+Wants=network-online.target
+
+[Service]
+Environment="KUBAPI_API=--secure-port=6443 --insecure-port=0 --advertise-address={{ kubernetes_api_advertise_ip }} --apiserver-count={{ groups[kubernetes_controllers_group]|default(['1']) | count }}"
+Environment="KUBAPI_CONTROL=--enable-bootstrap-token-auth=true --enable-admission-plugins=NodeRestriction {{ '--feature-gates='+kubernetes_feature if kubernetes_feature }}"
+Environment="KUBAPI_KUBECERT_ARGS=--service-account-issuer=sa --service-account-signing-key-file=/etc/kubernetes/pki/sa.key --service-account-key-file=/etc/kubernetes/pki/sa.pub --client-ca-file=/etc/kubernetes/pki/ca.crt --tls-cert-file=/etc/kubernetes/pki/apiserver.crt --tls-private-key-file=/etc/kubernetes/pki/apiserver.key"
+Environment="KUBAPI_KUBELET_ARGS=--kubelet-client-certificate=/etc/kubernetes/pki/apiserver-kubelet-client.crt --kubelet-client-key=/etc/kubernetes/pki/apiserver-kubelet-client.key --kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname"
+Environment="KUBAPI_AUTH=--authorization-mode=Node,RBAC --anonymous-auth=false"
+{% if kubernetes_api_etcd_servers %}
+Environment="KUBAPI_ETC_ARGS=--etcd-servers={{ kubernetes_api_etcd_servers -}}
+{% else %}
+Environment="KUBAPI_ETC_ARGS=--etcd-servers=
+{%- for host in groups[etcd_peer_group] -%}
+   {% if loop.last -%}
+https://{{ hostvars[host]['ansible_host'] }}:2379
+   {%- else -%}
+https://{{ hostvars[host]['ansible_host'] }}:2379,
+   {%- endif -%}
+{% endfor %}{% endif %} --etcd-cafile {{ etcd_client_trusted_ca_file }} --etcd-certfile {{ etcd_client_cert_file }} --etcd-keyfile {{ etcd_client_key_file }}{{' --encryption-provider-config=/etc/kubernetes/pki/encryption-provider.yml' if kubernetes_encryption_key else ''}}"
+Environment="KUBAPI_CLIENT=--proxy-client-cert-file=/etc/kubernetes/pki/apiserver-proxy-client.crt --proxy-client-key-file=/etc/kubernetes/pki/apiserver-proxy-client.key --requestheader-allowed-names=front-proxy-client --requestheader-client-ca-file=/etc/kubernetes/pki/front-proxy-ca.crt --requestheader-extra-headers-prefix=X-Remote-Extra- --requestheader-group-headers=X-Remote-Group --requestheader-username-headers=X-Remote-User"
+Environment="KUBAPI_SERVICE=--service-cluster-ip-range={{ kubernetes_service_net }}{{ ','+kubernetes_service_net6 if kubernetes_service_net6 }} --service-node-port-range={{ kubernetes_api_nodeport_range }}"
+Environment="KUBAPI_LOG_ARGS=--event-ttl=48h --v=1"
+EnvironmentFile=-/etc/default/%p
+ExecStart=/usr/bin/kube-apiserver $KUBAPI_API $KUBAPI_CONTROL $KUBAPI_KUBECERT_ARGS $KUBAPI_KUBELET_ARGS $KUBAPI_AUTH $KUBAPI_ETC_ARGS $KUBAPI_CLIENT $KUBAPI_SERVICE --allow-privileged $KUBAPI_LOG_ARGS
+Restart=always
+StartLimitInterval=0
+RestartSec=10
+LimitNOFILE=8192
+
+[Install]
+WantedBy=multi-user.target

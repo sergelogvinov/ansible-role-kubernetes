@@ -1,0 +1,25 @@
+apiVersion: v1
+clusters:
+- cluster:
+    certificate-authority-data: {{ kubernetes_ca_certificate_data }}
+    server: https://{{ kubernetes_api_host }}:6443
+  name: default
+contexts:
+- context:
+    cluster: default
+    namespace: default
+    user: default
+  name: default
+current-context: default
+kind: Config
+preferences: {}
+users:
+- name: default
+  user:
+{% if kubernetes_as_service %}
+    client-certificate: /etc/kubernetes/pki/apiserver-kubelet-client.crt
+    client-key: /etc/kubernetes/pki/apiserver-kubelet-client.key
+{% else %}
+    client-certificate: /var/lib/kube-proxy/pki/kube-proxy-client-current.pem
+    client-key: /var/lib/kube-proxy/pki/kube-proxy-client-current.pem
+{% endif %}

@@ -1,0 +1,64 @@
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+staticPodPath: /etc/kubernetes/manifests
+syncFrequency: 1m0s
+fileCheckFrequency: 20s
+httpCheckFrequency: 20s
+address: 0.0.0.0
+port: 10250
+authentication:
+  x509:
+    clientCAFile: /var/lib/kubelet/pki/ca.crt
+  webhook:
+    enabled: true
+    cacheTTL: 2m0s
+  anonymous:
+    enabled: false
+authorization:
+  mode: Webhook
+  webhook:
+    cacheAuthorizedTTL: 5m0s
+    cacheUnauthorizedTTL: 30s
+healthzPort: 0
+healthzBindAddress: 127.0.0.1
+oomScoreAdj: -999
+clusterDomain: {{ kubernetes_dns_domain }}
+clusterDNS:
+{% if kubernetes_dns_enable and kubernetes_dns_local_ip != '' %}
+- {{ kubernetes_dns_local_ip }}
+{% endif %}
+- {{ ansible_default_ipv4['address'] if not kubernetes_dns else kubernetes_dns }}
+resolvConf: {{ kubernetes_kubelet_resolv }}
+streamingConnectionIdleTimeout: 0s
+cgroupDriver: cgroupfs
+cpuManagerPolicy: {{ kubernetes_kubelet_cpupolicy }}
+cpuManagerReconcilePeriod: 60s
+rotateCertificates: true
+serverTLSBootstrap: true
+maxPods: {{ kubernetes_kubelet_maxpods }}
+podPidsLimit: -1
+cpuCFSQuota: true
+cpuCFSQuotaPeriod: 100ms
+maxOpenFiles: 1000000
+evictionHard:
+  imagefs.available: 15%
+  memory.available: 100Mi
+  nodefs.available: 10%
+  nodefs.inodesFree: 5%
+failSwapOn: false
+featureGates:
+  IPv6DualStack: true
+allowedUnsafeSysctls:
+- net.core.somaxconn
+containerLogMaxSize: 10Mi
+containerLogMaxFiles: 5
+{% if kubernetes_system_reserved %}
+systemReserved:
+{% for item in kubernetes_system_reserved.split(',') %}
+  {{ item | replace("=", ": ") }}
+{% endfor %}{% endif %}
+{% if kubernetes_kubelet_reserved %}
+kubeReserved:
+{% for item in kubernetes_kubelet_reserved.split(',') %}
+  {{ item | replace("=", ": ") }}
+{% endfor %}{% endif %}

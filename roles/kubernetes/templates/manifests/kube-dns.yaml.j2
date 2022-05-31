@@ -1,0 +1,57 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: coredns
+  namespace: kube-system
+  labels:
+    k8s-app: kube-dns-local
+    kubernetes.io/name: "CoreDNS"
+spec:
+  hostNetwork: true
+  tolerations:
+    - effect: NoSchedule
+      operator: Exists
+    - key: CriticalAddonsOnly
+      operator: Exists
+    - effect: NoSchedule
+      key: node-role.kubernetes.io/master
+  containers:
+    - name: coredns
+      image: k8s.gcr.io/coredns:1.6.5
+      imagePullPolicy: IfNotPresent
+      args: [ "-conf", "/etc/coredns/Corefile" ]
+      resources:
+        limits:
+          memory: 170Mi
+        requests:
+          cpu: 100m
+          memory: 70Mi
+      volumeMounts:
+        - name: config-volume
+          mountPath: /etc/coredns
+          readOnly: true
+      livenessProbe:
+        httpGet:
+          host: 127.0.0.1
+          path: /health
+          port: 8091
+          scheme: HTTP
+        initialDelaySeconds: 60
+        timeoutSeconds: 5
+        successThreshold: 1
+        failureThreshold: 5
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          add:
+          - NET_BIND_SERVICE
+          drop:
+          - all
+        readOnlyRootFilesystem: true
+  priorityClassName: system-cluster-critical
+  restartPolicy: Always
+  dnsPolicy: Default
+  volumes:
+    - name: config-volume
+      hostPath:
+        path: /etc/coredns

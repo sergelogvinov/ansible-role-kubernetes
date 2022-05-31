@@ -1,0 +1,157 @@
+---
+
+- include_tasks: install.yml
+  when: kubernetes_ppa_use|bool
+  tags: [kubenode]
+
+- name: Prepare directories
+  file:
+    path: "{{ item.name }}"
+    mode: "{{ item.mode }}"
+    owner: root
+    group: root
+    state: directory
+  when: item.when | default('true')
+  with_items:
+    - { name: /etc/kubernetes,            mode: '0755' }
+    - { name: /etc/kubernetes/pki,        mode: '0700' }
+    - { name: /etc/kubernetes/manifests,  mode: '0755' }
+    - { name: /etc/cni,                   mode: '0755' }
+    - { name: /etc/cni/net.d,             mode: '0755' }
+    - { name: /opt/cni,                   mode: '0755' }
+    - { name: /opt/cni/bin,               mode: '0755' }
+    - { name: /var/lib/kubelet,           mode: '0750' }
+    - { name: /var/lib/kubelet/pki,       mode: '0750' }
+    - { name: /var/lib/kube-proxy,        mode: '0750' }
+    - { name: /var/lib/kube-proxy/pki,    mode: '0750' }
+    - { name: "/var/cache/apt/archives/kubernetes-{{ kubernetes_version }}",
+                                          mode: '0750' }
+    - { name: /root/.kube,                mode: '0700', when: "{{ kubernetes_enable_apiserver }}" }
+  tags: [kubenode,ssl-certs]
+
+# - include_tasks: install_tar.yml
+#   when: not kubernetes_ppa_use
+
+- include_tasks: install_tar_ext.yml
+  when: not kubernetes_ppa_use|bool
+
+- name: Install pkgs
+  apt:
+    name: ['python3-openssl', 'socat', 'net-tools', 'ipvsadm', 'conntrack']
+    state: 'latest'
+  when: ansible_os_family == "Debian"
+  tags: [kubenode]
+
+- name: Update Kubernetes systemd configs
+  template:
+    src: "systemd/{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  notify: kubernetes-systemctl-reload
+  when: item.when|bool
+  with_items:
+    - { src: "kubelet.conf.j2",                 dest: "/etc/systemd/system/kubelet.service",                  mode: '0644',
+        when: "{{ kubernetes_enable_kublet }}" }
+    - { src: "kubelet.timer.j2",                dest: "/etc/systemd/system/kubelet.timer",                    mode: '0644',
+        when: "{{ kubernetes_enable_kublet }}" }
+    - { src: "kube-proxy.conf.j2",              dest: "/etc/systemd/system/kube-proxy.service",               mode: '0644',
+        when: "{{ kubernetes_enable_proxy }}" }
+
+    - { src: "kube-apiserver.conf.j2",          dest: "/etc/systemd/system/kube-apiserver.service",           mode: '0644',
+        when: "{{ kubernetes_as_service and kubernetes_enable_apiserver }}" }
+    - { src: "kube-scheduler.conf.j2",          dest: "/etc/systemd/system/kube-scheduler.service",           mode: '0644',
+        when: "{{ kubernetes_as_service and kubernetes_enable_scheduler }}" }
+    - { src: "kube-controller-manager.conf.j2", dest: "/etc/systemd/system/kube-controller-manager.service",  mode: '0644',
+        when: "{{ kubernetes_as_service and kubernetes_enable_controller }}" }
+  tags: [config,systemd,kubenode]
+
+- meta: flush_handlers
+  tags: [kubenode]
+
+- name: Prepare directory for local cache
+  file:
+    path: "{{ item }}"
+    mode: "0700"
+    state: directory
+  connection: local
+  run_once: true
+  with_items:
+    - "{{ playbook_dir }}/files/kubernetes/{{ kubernetes_api_host }}"
+  tags: [kubenode]
+
+- import_tasks: auth.yml
+  when: kubernetes_enable_apiserver|bool
+
+- import_tasks: certs.yml
+  when: kubernetes_enable_apiserver|bool
+
+- name: Copy keys/certs to node
+  copy:
+    content: "{{ item.content }}"
+    dest: "/var/lib/kubelet/pki/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: 0400
+  when: item.when|bool
+  with_items:
+    - { content: "{{ kubernetes_ca_certificate_data | default() | b64decode  }}\n",      dest: "ca.crt",   when: "{{ kubernetes_enable_kublet }}" }
+  no_log: true
+  tags: [ssl-certs,kubenode]
+
+- name: Create configs
+  template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  when: item.when|bool
+  with_items:
+    - { src: "kubelet.default.j2",          dest: "/etc/default/kubelet",                     mode: '0644', when: "{{ kubernetes_enable_kublet }}"    }
+    - { src: "kubelet-bootstrap.conf.j2",   dest: "/etc/kubernetes/bootstrap-kubelet.conf",   mode: '0600', when: "{{ kubernetes_enable_kublet }}"    }
+    - { src: "kubelet.conf.j2",             dest: "/etc/kubernetes/kubelet.conf",             mode: '0600', when: "{{ kubernetes_enable_kublet }}"    }
+    - { src: "kubelet.yml.j2",              dest: "/var/lib/kubelet/config.yaml",             mode: '0600', when: "{{ kubernetes_enable_kublet }}"    }
+    - { src: "kube-proxy.conf.j2",          dest: "/var/lib/kube-proxy/kubeconfig.conf",      mode: '0600', when: "{{ kubernetes_enable_proxy }}"     }
+    - { src: "kube-proxy.yml.j2",           dest: "/var/lib/kube-proxy/config.yaml",          mode: '0600', when: "{{ kubernetes_enable_proxy }}"     }
+
+    - { src: "admin.conf.j2",               dest: "/root/.kube/config",                       mode: '0600', when: "{{ kubernetes_enable_apiserver }}"   }
+    - { src: "kubelet-bootstrap.yaml.j2",   dest: "/etc/kubernetes/bootstrap.yaml",           mode: '0600', when: "{{ kubernetes_enable_apiserver }}"   }
+    - { src: "kubectl-bootstrap.yaml.j2",   dest: "/etc/kubernetes/kubectl-csr.yaml",         mode: '0600', when: "{{ kubernetes_enable_apiserver }}"   }
+    - { src: "audit-policy.yml.j2",         dest: "/etc/kubernetes/audit-policy.yaml",        mode: '0600', when: "{{ kubernetes_enable_apiserver }}"   }
+
+    - { src: "scheduler.conf.j2",           dest: "/etc/kubernetes/scheduler.conf",           mode: '0600', when: "{{ kubernetes_enable_scheduler }}"   }
+    - { src: "controller-manager.conf.j2",  dest: "/etc/kubernetes/controller-manager.conf",  mode: '0600', when: "{{ kubernetes_enable_controller }}"  }
+
+    # - { src: "coredns.yml.j2",              dest: "/etc/coredns/kubeconfig",                  mode: '0600', when: "{{ kubernetes_dns_enable }}"         }
+  register: kubelet_register
+  no_log: true
+  tags: [ssl-certs,config,systemd,kubenode]
+
+### Start kubernetes
+
+- name: Start k8s service
+  service:
+    name: "{{ item.name }}"
+    state: "{{ item.state }}"
+    enabled: "{{ item.enabled }}"
+  when: item.when|bool
+  with_items:
+    - { name: 'kube-apiserver',           state: "{{ 'restarted' if kubelet_register.changed else 'started' }}",
+        enabled: "{{ kubernetes_enable_apiserver }}",   when: "{{ kubernetes_as_service and kubernetes_enable_apiserver }}"  }
+    - { name: 'kube-scheduler',           state: "{{ 'restarted' if kubelet_register.changed else 'started' }}",
+        enabled: "{{ kubernetes_enable_scheduler }}",   when: "{{ kubernetes_as_service and kubernetes_enable_scheduler }}"  }
+    - { name: 'kube-controller-manager',  state: "{{ 'restarted' if kubelet_register.changed else 'started' }}",
+        enabled: "{{ kubernetes_enable_controller }}",  when: "{{ kubernetes_as_service and kubernetes_enable_controller }}" }
+
+    - { name: 'kubelet',          state: "{% if kubernetes_enable_kublet %}{{ 'restarted' if kubelet_register.changed else 'started' }}{% else %}stopped{% endif %}",
+        enabled: false,                             when: "{{ kubernetes_enable_kublet }}" }
+    - { name: 'kubelet.timer',    state: "{% if kubernetes_enable_kublet %}started{% else %}stopped{% endif %}",
+        enabled: "{{ kubernetes_enable_kublet }}",  when: "{{ kubernetes_enable_kublet }}" }
+    - { name: 'kube-proxy',       state: "{% if kubernetes_enable_proxy  %}{{ 'restarted' if kubelet_register.changed else 'started' }}{% else %}stopped{% endif %}",
+        enabled: "{{ kubernetes_enable_proxy }}",   when: "{{ kubernetes_enable_proxy }}" }
+  tags: [systemd,kubenode]
+
+- import_tasks: manifests.yml
+  when: kubernetes_enable_kublet|bool
