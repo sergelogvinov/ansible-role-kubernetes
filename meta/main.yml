@@ -1,0 +1,18 @@
+---
+
+galaxy_info:
+  role_name: kubernetes
+  author: Serge Logvinov
+  description: Kubernetes from scratch
+  license: Apache
+  min_ansible_version: 2.4
+  platforms:
+    - name: Debian
+      versions:
+        - all
+    - name: Ubuntu
+      versions:
+        - all
+  galaxy_tags: []
+
+dependencies: []
