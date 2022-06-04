@@ -13,3 +13,11 @@ pod static (preferred way)
 classic kubernetes deployment
 
 Ansible creates the certificates for the contol-plane. Worker nodes use tokens to join the cluster. The certificates can be stored in ansible-vault or they will be put to the local machine (where ansible was launched).
+
+## Install
+
+```shell
+ansible-galaxy role install git+https://github.com/sergelogvinov/ansible-role-kubernetes.git,main
+```
+
+## Usage
